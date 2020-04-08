@@ -15,6 +15,7 @@
 #define BLOCK_SIZE 1024
 
 #define BUFFER_COUNT 8
+#define WORD_LENGTH 64
 #define ROUND_COUNT 80
 
 using namespace std;
@@ -71,6 +72,17 @@ string sha512Padding(string input) {
 	return finalPlainText;
 }
 
+ull getUllFromString(string str) {
+	bitset<WORD_LENGTH> word(str);
+	return word.to_ullong();
+}
+
+static inline ull rotr64(ull n, ull c) {
+	const unsigned int mask = (CHAR_BIT * sizeof(n) - 1);
+	c &= mask;
+	return (n>>c) | (n<<((-c)&mask ));
+}
+
 int main() {
 
 	vector<ull> buffers(BUFFER_COUNT);
@@ -81,11 +93,61 @@ int main() {
 	string input;
 	getline(cin, input);
 	
+	cout<<"Input: "<<input<<endl;
 	string paddedInput = sha512Padding(input);
 
+	cout<<paddedInput<<endl<<endl;
+
 	for(int i=0 ; i<paddedInput.size() ; i+=BLOCK_SIZE) {
-		bitset<BLOCK_SIZE> block(paddedInput.substr(i, BLOCK_SIZE));
-		cout<<block.to_string()<<endl;
+		string currentBlock = paddedInput.substr(i, BLOCK_SIZE);
+		
+		vector<ull> w(ROUND_COUNT);
+		for(int j=0 ; j<16 ; ++j) {
+			w[j] = getUllFromString(currentBlock.substr(j, WORD_LENGTH));
+		}
+
+		for(int j=16 ; j<80 ; ++j) {
+			ull sigma1 = (rotr64(w[j-15], 1)) ^ (rotr64(w[j-15], 8)) ^ (w[j-15] >> 7);
+			ull sigma2 = (rotr64(w[j-2], 19)) ^ (rotr64(w[j-2], 61)) ^ (w[j-2] >> 6);
+
+        	w[j] = w[j-16] + sigma1 + w[j-7] + sigma2;
+		}
+
+		ull a = buffers[0], b = buffers[1], c = buffers[2], d = buffers[3];
+		ull e = buffers[4], f = buffers[5], g = buffers[6], h = buffers[7];
+
+		for(int j=0 ; j<ROUND_COUNT ; ++j) {
+
+			ull sum0 = (rotr64(a, 28)) ^ (rotr64(a, 34)) ^ (rotr64(a, 39));
+        	ull sum1 = (rotr64(e, 14)) ^ (rotr64(e, 18)) ^ (rotr64(e, 41));
+
+        	ull ch = (e && f) ^ ((!e) && g);
+        	ull temp1 = h + sum1 + ch + constants[i] + w[i];
+        	ull majorityFunction = (a && b) ^ (a && c) ^ (b && c);
+        	ull temp2 = sum0 + majorityFunction;
+
+        	h = g;
+        	g = f;
+        	f = e;
+        	e = d + temp1;
+        	d = c;
+        	c = b;
+        	b = a;
+        	a = temp1 + temp2;
+        }
+
+        buffers[0] += a;
+        buffers[1] += b;
+        buffers[2] += c;
+        buffers[3] += d;
+        buffers[4] += e;
+        buffers[5] += f;
+        buffers[6] += g;
+        buffers[7] += h;
+	}
+
+	for(int i=0 ; i<BUFFER_COUNT ; ++i) {
+		cout << setfill('0') << setw(16) << right << hex << buffers[i];
 	}
 
 	return 0;
